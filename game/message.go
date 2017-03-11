@@ -1,11 +1,21 @@
 package game
 
-type RawMessage struct {
-	player  *Player
-	payload []byte
+import (
+	"encoding/json"
+)
+
+type RawMessageIn struct {
+	Type    string
+	Payload json.RawMessage
 }
 
-type EncodedMessage struct {
+type MessageIn struct {
+	Player  *Player
+	Type    string
+	Payload json.RawMessage
+}
+
+type MessageOut struct {
 	Type    string
 	Payload interface{}
 }

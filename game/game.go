@@ -1,6 +1,7 @@
 package game
 
 import (
+	"encoding/json"
 	"github.com/qaisjp/studenthackv-go-gameserver/mapgen"
 	"log"
 )
@@ -14,7 +15,7 @@ type Game struct {
 	Map      *mapgen.Map
 
 	// Inbound messages from players.
-	broadcast chan RawMessage
+	broadcast chan MessageIn
 
 	// Register requests from players.
 	register chan *Player
@@ -31,7 +32,7 @@ func NewGame() *Game {
 	g := &Game{
 		alive: true,
 
-		broadcast:  make(chan RawMessage),
+		broadcast:  make(chan MessageIn),
 		register:   make(chan *Player),
 		unregister: make(chan *Player),
 		players:    make(map[*Player]bool),
@@ -56,7 +57,7 @@ func (g *Game) Run() {
 				close(player.send)
 			}
 		case message := <-g.broadcast:
-			log.Printf("Player(%s) sent: %s\n", message.player.ID, message.payload)
+			log.Printf("Received (%s) from (%s): %s\n", message.Type, message.Player.ID, message.Payload)
 			g.onMessageReceive(message)
 		}
 	}
@@ -65,20 +66,46 @@ func (g *Game) Run() {
 func (g *Game) onPlayerConnect(p *Player) {
 	// g.onPlayerJoin(p)
 	g.players[p] = true
-	log.Printf("New player(%s) joined the game!\n", p.ID)
 
 	// Send them the map
 	p.SendMap()
+
+	log.Printf("New player(%s) joined the game!\n", p.ID)
 }
 
-func (g *Game) onMessageReceive(m RawMessage) {
-	for player := range g.players {
-		select {
-		case player.send <- append([]byte("Message: "), m.payload[:]...):
-		default:
-			log.Println("Connection lost perhaps?")
-			close(player.send)
-			delete(g.players, player)
+func (g *Game) onMessageReceive(m MessageIn) {
+
+	switch m.Type {
+	case "ident":
+
+		var payload string
+		json.Unmarshal(m.Payload, &payload)
+
+		m.Player.onIdentify(payload)
+	case "pos":
+		json.Unmarshal(m.Payload, &m.Player.Position)
+
+		for p := range g.players {
+			if p.ID != m.Player.ID {
+				p.Send(MessageOut{
+					Type:    "player",
+					Payload: m.Player,
+				})
+			}
+		}
+	default:
+		var payload string
+		json.Unmarshal(m.Payload, &payload)
+		log.Printf("Payload: %s\n", payload)
+
+		for player := range g.players {
+			select {
+			case player.send <- append([]byte("Message: "), payload[:]...):
+			default:
+				log.Println("Connection lost perhaps?")
+				close(player.send)
+				delete(g.players, player)
+			}
 		}
 	}
 }

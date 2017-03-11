@@ -18,7 +18,7 @@ const (
 	ServantCharacter
 )
 
-type PlayerID []byte
+type PlayerID string
 type Position struct {
 	X float64
 	Z float64
@@ -54,11 +54,14 @@ const (
 
 func NewPlayer(g *Game, conn *websocket.Conn) *Player {
 	client := &Player{
-		ID:   []byte(uniuri.NewLen(uniuri.UUIDLen)),
+		ID:   PlayerID(string(uniuri.NewLen(uniuri.UUIDLen))),
 		game: g,
 		conn: conn,
 		send: make(chan []byte, 256),
 	}
+
+	client.Position.X = 4
+	client.Position.Z = 4
 
 	log.Printf("New player(%s) connected...\n", client.ID)
 	g.register <- client
@@ -69,7 +72,7 @@ func NewPlayer(g *Game, conn *websocket.Conn) *Player {
 	return client
 }
 
-// readPump pumps messages from the websocket connection to the hub.
+// readPump pumps messages from the websocket connection to the game.
 //
 // The application runs readPump in a per-connection goroutine. The application
 // ensures that there is at most one reader on a connection by executing all
@@ -78,27 +81,36 @@ func (p *Player) readPump() {
 	defer func() {
 		p.game.unregister <- p
 		p.conn.Close()
+		log.Println("ReadPump ended")
 	}()
-	p.conn.SetReadLimit(maxMessageSize)
-	p.conn.SetReadDeadline(time.Now().Add(pongWait))
-	p.conn.SetPongHandler(func(string) error { p.conn.SetReadDeadline(time.Now().Add(pongWait)); return nil })
+	// p.conn.SetReadLimit(maxMessageSize)
+	// p.conn.SetReadDeadline(time.Now().Add(pongWait))
+	// p.conn.SetPongHandler(func(string) error { p.conn.SetReadDeadline(time.Now().Add(pongWait)); return nil })
 	for {
 		_, message, err := p.conn.ReadMessage()
 		if err != nil {
-			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway) {
-				log.Printf("error: %v", err)
-			}
+			// if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway) {
+			log.Printf("error: %v", err)
+			// }
 			break
 		}
 		message = bytes.TrimSpace(bytes.Replace(message, newline, space, -1))
 
-		m := RawMessage{p, message}
+		m := MessageIn{}
+		err = json.Unmarshal(message, &m)
+		if err != nil {
+			log.Println(err)
+			log.Printf("Invalid JSON received from %s: %s\n", p.ID, message)
+			continue
+		}
+
+		m.Player = p
 
 		p.game.broadcast <- m
 	}
 }
 
-// writePump pumps messages from the hub to the websocket connection.
+// writePump pumps messages from the game to the websocket connection.
 //
 // A goroutine running writePump is started for each connection. The
 // application ensures that there is at most one writer to a connection by
@@ -112,7 +124,7 @@ func (p *Player) writePump() {
 	for {
 		select {
 		case message, ok := <-p.send:
-			p.conn.SetWriteDeadline(time.Now().Add(writeWait))
+			// p.conn.SetWriteDeadline(time.Now().Add(writeWait))
 			if !ok {
 				// The hub closed the channel.
 				p.conn.WriteMessage(websocket.CloseMessage, []byte{})
@@ -136,7 +148,7 @@ func (p *Player) writePump() {
 				return
 			}
 		case <-ticker.C:
-			p.conn.SetWriteDeadline(time.Now().Add(writeWait))
+			// p.conn.SetWriteDeadline(time.Now().Add(writeWait))
 			if err := p.conn.WriteMessage(websocket.PingMessage, []byte{}); err != nil {
 				return
 			}
@@ -144,7 +156,7 @@ func (p *Player) writePump() {
 	}
 }
 
-func (p *Player) Send(m EncodedMessage) {
+func (p *Player) Send(m MessageOut) {
 	b, err := json.Marshal(m)
 	if err != nil {
 		panic(err)
@@ -154,8 +166,49 @@ func (p *Player) Send(m EncodedMessage) {
 }
 
 func (p *Player) SendMap() {
-	p.Send(EncodedMessage{
+	p.Send(MessageOut{
 		Type:    "map",
 		Payload: p.game.Map,
 	})
+}
+
+func (p *Player) onIdentify(name string) {
+	if string(name) == "oculus" {
+		p.game.Monster = p
+		p.Character = MonsterCharacter
+	} else if string(name) == "player" {
+		p.game.Servants = append(p.game.Servants, p)
+		if len(p.game.Servants) == 1 {
+			p.Character = KingCharacter
+		} else {
+			p.Character = ServantCharacter
+		}
+	} else {
+		panic("Invalid name " + name)
+	}
+
+	players := []*Player{}
+	for p := range p.game.players {
+		players = append(players, p)
+	}
+
+	p.Send(MessageOut{
+		Type: "registered",
+		Payload: struct {
+			You     *Player
+			Players []*Player
+		}{
+			You:     p,
+			Players: players,
+		},
+	})
+
+	for player := range p.game.players {
+		if p.ID != player.ID {
+			player.Send(MessageOut{
+				Type:    "joined",
+				Payload: p,
+			})
+		}
+	}
 }
