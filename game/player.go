@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"github.com/dchest/uniuri"
 	"github.com/gorilla/websocket"
+	. "github.com/qaisjp/studenthackv-go-gameserver/structs"
 	"log"
 	"time"
 )
@@ -19,10 +20,6 @@ const (
 )
 
 type PlayerID string
-type Position struct {
-	X float64
-	Z float64
-}
 
 type Player struct {
 	ID        PlayerID
@@ -60,8 +57,8 @@ func NewPlayer(g *Game, conn *websocket.Conn) *Player {
 		send: make(chan []byte, 256),
 	}
 
-	client.Position.X = 4
-	client.Position.Z = 4
+	client.Position.X = float64(g.Map.Width+1) / 2
+	client.Position.Z = float64(g.Map.Height+1) / 2
 
 	log.Printf("New player(%s) connected...\n", client.ID)
 	g.register <- client

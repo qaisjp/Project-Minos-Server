@@ -3,7 +3,10 @@ package game
 import (
 	"encoding/json"
 	"github.com/qaisjp/studenthackv-go-gameserver/mapgen"
+	// . "github.com/qaisjp/studenthackv-go-gameserver/structs"
 	"log"
+	"math/rand"
+	"time"
 )
 
 type Game struct {
@@ -36,8 +39,9 @@ func NewGame() *Game {
 		register:   make(chan *Player),
 		unregister: make(chan *Player),
 		players:    make(map[*Player]bool),
-		Map:        mapgen.NewMap(100, 100),
+		Map:        mapgen.NewMap(99, 99), // must be odd row/column
 	}
+
 	return g
 }
 
@@ -46,6 +50,8 @@ func (g *Game) IsAlive() bool {
 }
 
 func (g *Game) Run() {
+	c := time.Tick(1 * time.Second)
+
 	for {
 		select {
 		case player := <-g.register:
@@ -59,6 +65,15 @@ func (g *Game) Run() {
 		case message := <-g.broadcast:
 			log.Printf("Received (%s) from (%s): %s\n", message.Type, message.Player.ID, message.Payload)
 			g.onMessageReceive(message)
+		case <-c:
+			for p := range g.players {
+				p.Position.X = float64(1 + rand.Intn(g.Map.Width-4))
+				p.Position.Z = float64(1 + rand.Intn(g.Map.Height-4))
+				p.Send(MessageOut{
+					Type:    "player",
+					Payload: p,
+				})
+			}
 		}
 	}
 }

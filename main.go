@@ -4,14 +4,17 @@ import (
 	"flag"
 	"github.com/qaisjp/studenthackv-go-gameserver/server"
 	"log"
+	"math/rand"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 )
 
 var addr = flag.String("address", ":8080", "the address to ")
 
 func main() {
+	rand.Seed(time.Now().Unix())
 	flag.Parse()
 
 	// Create a new signal receiver
