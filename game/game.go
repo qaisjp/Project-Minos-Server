@@ -94,6 +94,10 @@ func (g *Game) Run() {
 						continue
 					}
 
+					if p.Dead {
+						continue
+					}
+
 					x := (g.Monster.Position.X) - (p.Position.X)
 					y := (g.Monster.Position.Z) - (p.Position.Z)
 
@@ -134,14 +138,16 @@ func (g *Game) onMessageReceive(m MessageIn) {
 
 		m.Player.onIdentify(payload)
 	case "pos":
-		json.Unmarshal(m.Payload, &m.Player.Position)
+		if !m.Player.Dead {
+			json.Unmarshal(m.Payload, &m.Player.Position)
 
-		for p := range g.players {
-			if p.ID != m.Player.ID {
-				p.Send(MessageOut{
-					Type:    "player",
-					Payload: m.Player,
-				})
+			for p := range g.players {
+				if p.ID != m.Player.ID {
+					p.Send(MessageOut{
+						Type:    "player",
+						Payload: m.Player,
+					})
+				}
 			}
 		}
 	default:
