@@ -104,10 +104,12 @@ func (g *Game) Run() {
 					if size(x, y) < 1 {
 						log.Printf("Player(%s) died", p.ID)
 						p.Dead = true
-						p.Send(MessageOut{
-							Type:    "dead",
-							Payload: p,
-						})
+						for pl := range g.players {
+							pl.Send(MessageOut{
+								Type:    "dead",
+								Payload: p,
+							})
+						}
 					}
 				}
 			}
