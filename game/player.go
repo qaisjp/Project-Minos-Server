@@ -28,6 +28,7 @@ type Player struct {
 	send      chan []byte     // Buffer channel of outbound messages
 	Character CharacterID
 	Position  Position
+	Dead      bool
 }
 
 var (
@@ -57,8 +58,7 @@ func NewPlayer(g *Game, conn *websocket.Conn) *Player {
 		send: make(chan []byte, 256),
 	}
 
-	client.Position.X = float64(g.Map.Width+1) / 2
-	client.Position.Z = float64(g.Map.Height+1) / 2
+	client.Position.X, client.Position.Z = g.Map.GetRandomSpace()
 
 	log.Printf("New player(%s) connected...\n", client.ID)
 	g.register <- client
@@ -174,11 +174,12 @@ func (p *Player) onIdentify(name string) {
 		p.game.Monster = p
 		p.Character = MonsterCharacter
 	} else if string(name) == "player" {
-		p.game.Servants = append(p.game.Servants, p)
-		if len(p.game.Servants) == 1 {
+		if p.game.King == nil {
 			p.Character = KingCharacter
+			p.game.King = p
 		} else {
 			p.Character = ServantCharacter
+			p.game.Servants = append(p.game.Servants, p)
 		}
 	} else {
 		panic("Invalid name " + name)
@@ -205,6 +206,18 @@ func (p *Player) onIdentify(name string) {
 			player.Send(MessageOut{
 				Type:    "joined",
 				Payload: p,
+			})
+		}
+	}
+}
+
+func (p *Player) onLeave() {
+	log.Printf("Player(%s) left the server", p.ID)
+	for player := range p.game.players {
+		if player.ID != p.ID {
+			player.Send(MessageOut{
+				Type:    "quit",
+				Payload: p.ID,
 			})
 		}
 	}

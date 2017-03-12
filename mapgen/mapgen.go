@@ -15,7 +15,7 @@ const (
 
 func (c CellType) MarshalJSON() ([]byte, error) {
 	n := 0
-	if c == WallCell {
+	if c == EmptySpaceCell {
 		n = 1
 	}
 	return json.Marshal(n)
@@ -82,13 +82,35 @@ func NewMap(w int, h int) *Map {
 	for c%2 == 0 {
 		c = rand.Intn(w)
 	}
+
+	if c > 0 {
+		c--
+	}
+	if r > 0 {
+		r--
+	}
+
 	// Starting cell
 	m.Cells[r][c] = EmptySpaceCell
+	m.Cells[r+1][c] = EmptySpaceCell
+	m.Cells[r][c+1] = EmptySpaceCell
+	m.Cells[r+1][c+1] = EmptySpaceCell
 
 	//　Allocate the maze with recursive method
 	recursion(m, r, c)
 
 	return expandMap(m)
+}
+
+func (m *Map) GetRandomSpace() (float64, float64) {
+	x := 1 + rand.Intn(m.Width-2)
+	y := 1 + rand.Intn(m.Height-2)
+
+	if m.Cells[x][y] == WallCell {
+		return m.GetRandomSpace()
+	}
+
+	return float64(x), float64(y)
 }
 
 func expandMap(mini *Map) *Map {
@@ -131,46 +153,62 @@ func recursion(m *Map, r int, c int) {
 		switch randDirs[i] {
 		case 1: // Up
 			//　Whether 2 cells up is out or not
-			if r-2 <= 0 {
+			if r-3 <= 0 {
 				continue
 			}
-			if maze[r-2][c] != EmptySpaceCell {
+			if maze[r-3][c] != EmptySpaceCell && maze[r-2][c] != EmptySpaceCell && maze[r-3][c+1] != EmptySpaceCell && maze[r-2][c+1] != EmptySpaceCell {
+				maze[r-3][c] = EmptySpaceCell
 				maze[r-2][c] = EmptySpaceCell
 				maze[r-1][c] = EmptySpaceCell
-				recursion(m, r-2, c)
+				maze[r-3][c+1] = EmptySpaceCell
+				maze[r-2][c+1] = EmptySpaceCell
+				maze[r-1][c+1] = EmptySpaceCell
+				recursion(m, r-3, c)
 			}
 			break
 		case 2: // Right
 			// Whether 2 cells to the right is out or not
-			if c+2 >= m.Width-1 {
+			if c+4 >= m.Width-1 {
 				continue
 			}
-			if maze[r][c+2] != EmptySpaceCell {
+			if maze[r][c+4] != EmptySpaceCell && maze[r][c+3] != EmptySpaceCell && maze[r+1][c+4] != EmptySpaceCell && maze[r+1][c+3] != EmptySpaceCell {
+				maze[r][c+4] = EmptySpaceCell
+				maze[r][c+3] = EmptySpaceCell
 				maze[r][c+2] = EmptySpaceCell
-				maze[r][c+1] = EmptySpaceCell
-				recursion(m, r, c+2)
+				maze[r+1][c+4] = EmptySpaceCell
+				maze[r+1][c+3] = EmptySpaceCell
+				maze[r+1][c+2] = EmptySpaceCell
+				recursion(m, r, c+3)
 			}
 			break
 		case 3: // Down
 			// Whether 2 cells down is out or not
-			if r+2 >= m.Height-1 {
+			if r+4 >= m.Height-1 {
 				continue
 			}
-			if maze[r+2][c] != EmptySpaceCell {
+			if maze[r+4][c] != EmptySpaceCell && maze[r+3][c] != EmptySpaceCell && maze[r+3][c+1] != EmptySpaceCell && maze[r+4][c+1] != EmptySpaceCell {
+				maze[r+4][c] = EmptySpaceCell
+				maze[r+3][c] = EmptySpaceCell
+				maze[r+4][c+1] = EmptySpaceCell
+				maze[r+3][c+1] = EmptySpaceCell
+				maze[r+2][c+1] = EmptySpaceCell
 				maze[r+2][c] = EmptySpaceCell
-				maze[r+1][c] = EmptySpaceCell
-				recursion(m, r+2, c)
+				recursion(m, r+3, c)
 			}
 			break
 		case 4: // Left
 			// Whether 2 cells to the left is out or not
-			if c-2 <= 0 {
+			if c-3 <= 0 {
 				continue
 			}
-			if maze[r][c-2] != EmptySpaceCell {
+			if maze[r][c-2] != EmptySpaceCell && maze[r][c-3] != EmptySpaceCell && maze[r+1][c-2] != EmptySpaceCell && maze[r+1][c-3] != EmptySpaceCell {
+				maze[r][c-3] = EmptySpaceCell
 				maze[r][c-2] = EmptySpaceCell
 				maze[r][c-1] = EmptySpaceCell
-				recursion(m, r, c-2)
+				maze[r+1][c-3] = EmptySpaceCell
+				maze[r+1][c-2] = EmptySpaceCell
+				maze[r+1][c-1] = EmptySpaceCell
+				recursion(m, r, c-3)
 			}
 			break
 		}

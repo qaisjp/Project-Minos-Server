@@ -5,7 +5,8 @@ import (
 	"github.com/qaisjp/studenthackv-go-gameserver/mapgen"
 	// . "github.com/qaisjp/studenthackv-go-gameserver/structs"
 	"log"
-	"math/rand"
+	// "math/rand"
+	"math"
 	"time"
 )
 
@@ -50,7 +51,7 @@ func (g *Game) IsAlive() bool {
 }
 
 func (g *Game) Run() {
-	c := time.Tick(1 * time.Second)
+	c := time.Tick(500 * time.Millisecond)
 
 	for {
 		select {
@@ -58,24 +59,60 @@ func (g *Game) Run() {
 			g.onPlayerConnect(player)
 		case player := <-g.unregister:
 			if _, ok := g.players[player]; ok {
-				log.Printf("Player(%s) left the server", player.ID)
+				player.onLeave()
+
 				delete(g.players, player)
 				close(player.send)
+
+				if player.Character == MonsterCharacter {
+					g.Monster = nil
+				} else if player.Character == KingCharacter {
+					g.King = nil
+				} else {
+					i := -1
+					for k, v := range g.Servants {
+						if v == player {
+							i = k
+							break
+						}
+					}
+
+					if i != -1 {
+						copy(g.Servants[i:], g.Servants[i+1:])
+						g.Servants[len(g.Servants)-1] = nil
+						g.Servants = g.Servants[:len(g.Servants)-1]
+					}
+				}
 			}
 		case message := <-g.broadcast:
 			log.Printf("Received (%s) from (%s): %s\n", message.Type, message.Player.ID, message.Payload)
 			g.onMessageReceive(message)
 		case <-c:
-			for p := range g.players {
-				p.Position.X = float64(1 + rand.Intn(g.Map.Width-4))
-				p.Position.Z = float64(1 + rand.Intn(g.Map.Height-4))
-				p.Send(MessageOut{
-					Type:    "player",
-					Payload: p,
-				})
+			if g.Monster != nil {
+				for p := range g.players {
+					if p.Character == MonsterCharacter {
+						continue
+					}
+
+					x := (g.Monster.Position.X) - (p.Position.X)
+					y := (g.Monster.Position.Z) - (p.Position.Z)
+
+					if size(x, y) < 1 {
+						log.Printf("Player(%s) died", p.ID)
+						p.Dead = true
+						p.Send(MessageOut{
+							Type:    "dead",
+							Payload: p,
+						})
+					}
+				}
 			}
 		}
 	}
+}
+
+func size(x float64, y float64) float64 {
+	return math.Sqrt(math.Pow(x, 2) + math.Pow(y, 2))
 }
 
 func (g *Game) onPlayerConnect(p *Player) {
@@ -92,7 +129,6 @@ func (g *Game) onMessageReceive(m MessageIn) {
 
 	switch m.Type {
 	case "ident":
-
 		var payload string
 		json.Unmarshal(m.Payload, &payload)
 
